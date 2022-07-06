@@ -144,6 +144,27 @@ class TestApi(unittest.TestCase):
             headers=self.get_auth_headers(token_1))
         self.assertEqual(code, 200)
 
+        # check user notifications
+        code, response = self.get("/api/users/me/notifications",
+            headers=self.get_auth_headers(token_1))
+        self.assertEqual(code, 200)
+        self.assertTrue(len(response['notifications']) > 0)
+        self.assertTrue(any(n['action'] == 'NONE' for n in response['notifications']))
+
+        # set a notification for the user
+        first_notification_type = response['notifications'][0]['notification_type']
+        code, response = self.put("/api/users/me/notifications",
+            {'notifications': [{'notification_type': first_notification_type, 'action': 'TWITTER_DM'}]},
+            headers=self.get_auth_headers(token_1))
+        self.assertEqual(code, 200)
+
+        # check user notifications again and we should find the one just set
+        code, response = self.get("/api/users/me/notifications",
+            headers=self.get_auth_headers(token_1))
+        self.assertEqual(code, 200)
+        self.assertTrue(len(response['notifications']) > 0)
+        self.assertEqual([n for n in response['notifications'] if n['notification_type'] == first_notification_type][0]['action'], 'TWITTER_DM')
+
         # create another user
         code, response = self.get("/api/login")
         self.assertEqual(code, 200)
@@ -291,6 +312,24 @@ class TestApi(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(len(response['auctions']), 1)
         self.assertEqual(response['auctions'][0]['key'], auction_key_2)
+
+        # the first user does not, by default, follow the second auction
+        code, response = self.get(f"/api/auctions/{auction_key_2}",
+            headers=self.get_auth_headers(token_1))
+        self.assertEqual(code, 200)
+        self.assertFalse(response['auction']['following'])
+
+        # start following the auction
+        code, response = self.put(f"/api/auctions/{auction_key_2}/follow",
+            {'follow': True},
+            headers=self.get_auth_headers(token_1))
+        self.assertEqual(code, 200)
+
+        # the user is now following the auction
+        code, response = self.get(f"/api/auctions/{auction_key_2}",
+            headers=self.get_auth_headers(token_1))
+        self.assertEqual(code, 200)
+        self.assertTrue(response['auction']['following'])
 
         # can't DELETE an auction if not logged in
         code, response = self.delete(f"/api/auctions/{auction_key_2}")

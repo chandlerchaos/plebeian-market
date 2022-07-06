@@ -146,6 +146,27 @@ def verify_twitter(user):
         db.session.commit()
         return jsonify({})
 
+@api_blueprint.route('/api/users/me/notifications', methods=['GET', 'PUT'])
+@user_required
+def user_notifications(user):
+    existing_notifications = {
+        n.notification_type: n for n in m.UserNotification.query.filter_by(user_id=user.id).all()
+    }
+    if request.method == 'GET':
+        notifications = list(existing_notifications.values())
+        for notification_type in set(m.NOTIFICATION_TYPES.keys()) - set(existing_notifications.keys()):
+            notifications.append(m.UserNotification(notification_type=notification_type, action=m.NOTIFICATION_TYPES[notification_type]['default_action']))
+        return jsonify({'notifications': [n.to_dict() for n in notifications]})
+    elif request.method == 'PUT':
+        for notification in request.json['notifications']:
+            if notification['notification_type'] not in existing_notifications:
+                new_notification = m.UserNotification(user_id=user.id, notification_type=notification['notification_type'], action=notification['action'])
+                db.session.add(new_notification)
+            else:
+                existing_notifications[notification['notification_type']].action = notification['action']
+        db.session.commit()
+        return jsonify({})
+
 @api_blueprint.route('/api/auctions', methods=['GET', 'POST'])
 @user_required
 def auctions(user):
@@ -170,7 +191,7 @@ def auctions(user):
         db.session.add(auction)
         db.session.commit()
 
-        return jsonify({'auction': auction.to_dict(for_user=user)})
+        return jsonify({'auction': auction.to_dict(for_user=user.id)})
 
 @api_blueprint.route('/api/auctions/featured', methods=['GET'])
 def featured_auctions():
@@ -244,6 +265,25 @@ def auction(key):
             db.session.commit()
 
             return jsonify({})
+
+@api_blueprint.route('/api/auctions/<string:key>/follow', methods=['PUT'])
+@user_required
+def follow_auction(user, key):
+    auction = m.Auction.query.filter_by(key=key).first()
+    if not auction:
+        return jsonify({'message': "Not found."}), 404
+
+    follow = bool(request.json['follow'])
+
+    user_auction = m.UserAuction.query.filter_by(user_id=user.id, auction_id=auction.id).one_or_none()
+    if user_auction is None:
+        user_auction = m.UserAuction(user_id=user.id, auction_id=auction.id, following=follow)
+        db.session.add(user_auction)
+    else:
+        user_auction.following = follow
+    db.session.commit()
+
+    return jsonify({})
 
 @api_blueprint.route('/api/auctions/<string:key>/start-twitter', methods=['PUT'])
 @user_required

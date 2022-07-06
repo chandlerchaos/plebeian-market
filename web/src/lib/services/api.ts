@@ -1,5 +1,6 @@
 import { goto } from "$app/navigation";
 import { type Auction, fromJson as auctionFromJson } from "../types/auction";
+import { type UserNotification, fromJson as userNotificationFromJson, PostUserNotification } from "../types/notification";
 import { type User, fromJson as userFromJson } from "../types/user";
 import { isLocal, isStaging } from "../utils";
 import { token, Error } from "../stores";
@@ -119,6 +120,29 @@ export function postProfile(tokenValue, profile: {twitterUsername: string, contr
                 response.json().then(data => {
                     successCB(userFromJson(data.user));
                 });
+            } else {
+                errorHandler.handle(response);
+            }
+        });
+}
+
+export function getUserNotifications(tokenValue, successCB: (notifications: UserNotification[]) => void) {
+    fetchAPI("/api/users/me/notifications", 'GET', tokenValue, null,
+        response => {
+            if (response.status === 200) {
+                response.json().then(data => {
+                    successCB(data.notifications.map(userNotificationFromJson));
+                });
+            }
+        })
+}
+
+export function putUserNotifications(tokenValue, notifications: PostUserNotification[], successCB: () => void, errorHandler = new ErrorHandler()) {
+    fetchAPI("/api/users/me/notifications", 'PUT', tokenValue,
+        JSON.stringify({'notifications': notifications.map(n => n.toJson())}),
+        response => {
+            if (response.status === 200) {
+                response.json().then(successCB);
             } else {
                 errorHandler.handle(response);
             }

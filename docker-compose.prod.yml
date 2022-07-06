@@ -15,3 +15,6 @@ services:
     environment:
       - FLASK_APP=main
       - LND_GRPC=plebeian-market.m.voltageapp.io:10009
+  process-notifications:
+    environment:
+      - FLASK_APP=main

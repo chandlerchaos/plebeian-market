@@ -83,6 +83,11 @@ def settle_bids():
                 state.value = str(last_settle_index)
                 db.session.commit()
 
+@app.cli.command("process-notifications")
+@with_appcontext
+def process_notifications():
+    pass
+
 def get_token_from_request():
     return request.headers.get('X-Access-Token')
 

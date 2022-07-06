@@ -105,6 +105,57 @@ class User(db.Model):
             d['is_moderator'] = True
         return d
 
+NOTIFICATION_TYPES = {
+    'AUCTION_END': {
+        'description': "Auction ended (TODO)",
+        'default_action': 'NONE',
+    },
+    'AUCTION_END_10MIN': {
+        'description': "Auction ending in 10 minutes (TODO)",
+        'default_action': 'NONE',
+    },
+    'NEW_BID': {
+        'description': "New bid (TODO)",
+        'default_action': 'NONE',
+    }
+}
+
+NOTIFICATION_ACTIONS = {
+    'NONE': {
+        'description': "Ignore",
+    },
+    'TWITTER_DM': {
+        'description': "Twitter DM (TODO)",
+    }
+}
+
+class UserNotification(db.Model):
+    __tablename__ = 'user_notifications'
+
+    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False, primary_key=True)
+    notification_type = db.Column(db.String(32), nullable=False, primary_key=True)
+    action = db.Column(db.String(32), nullable=False)
+
+    def to_dict(self):
+        return {
+            'notification_type': self.notification_type,
+            'notification_type_description': NOTIFICATION_TYPES[self.notification_type]['description'],
+            'action': self.action,
+            'action_description': NOTIFICATION_ACTIONS[self.action]['description'],
+        }
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False)
+
+    # the key of a message is the notification type combined with auction/bid IDs
+    # in a way that ensures that every notification to only be sent once to a user
+    # for example, for an AUCTION_END notification, we would combine that to the auction ID
+    key = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow())
+
 def hash_create(length):
     return b32encode(urandom(length)).decode("ascii").replace("=", "")
 
@@ -154,6 +205,8 @@ class Auction(db.Model):
 
     bids = db.relationship('Bid', backref='auction', foreign_keys='Bid.auction_id', order_by='desc(Bid.requested_at)')
     media = db.relationship('Media', backref='auction', foreign_keys='Media.auction_id')
+
+    user_auctions = db.relationship('UserAuction', cascade="all,delete", backref='auction')
 
     @property
     def started(self):
@@ -227,6 +280,10 @@ class Auction(db.Model):
                     auction['contribution_qr'] = qr.getvalue().decode('utf-8')
                 elif for_user == self.seller_id:
                     auction['wait_contribution'] = True
+
+        if for_user is not None and for_user != self.seller_id:
+            user_auction = UserAuction.query.filter_by(user_id=for_user, auction_id=self.id).one_or_none()
+            auction['following'] = user_auction.following if user_auction is not None else False
 
         return auction
 
@@ -352,3 +409,11 @@ class Bid(db.Model):
             # if the buyer that placed this bid is looking, we can share the payment_request with him so he knows the transaction was settled
             bid['payment_request'] = self.payment_request
         return bid
+
+class UserAuction(db.Model):
+    __tablename__ = 'user_auctions'
+
+    user_id = db.Column(db.Integer, db.ForeignKey(User.id), nullable=False, primary_key=True)
+    auction_id = db.Column(db.Integer, db.ForeignKey(Auction.id), nullable=False, primary_key=True)
+
+    following = db.Column(db.Boolean, nullable=False)
